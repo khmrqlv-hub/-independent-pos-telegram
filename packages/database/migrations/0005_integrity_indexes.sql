@@ -33,9 +33,9 @@ CREATE OR REPLACE FUNCTION verify_sale_totals() RETURNS trigger LANGUAGE plpgsql
 DECLARE
   target_sale uuid;
   stored sales%ROWTYPE;
-  line_original numeric;
-  line_discount numeric;
-  line_final numeric;
+  aggregated_original numeric;
+  aggregated_discount numeric;
+  aggregated_final numeric;
   paid numeric;
 BEGIN
   IF TG_TABLE_NAME = 'sales' THEN
@@ -44,11 +44,12 @@ BEGIN
     target_sale := NEW.sale_id;
   END IF;
   SELECT * INTO stored FROM sales WHERE id = target_sale;
-  SELECT coalesce(sum(line_original_total),0), coalesce(sum(line_discount),0), coalesce(sum(line_final_total),0)
-    INTO line_original, line_discount, line_final FROM sale_items WHERE sale_id = target_sale;
+  SELECT coalesce(sum(si.line_original_total),0), coalesce(sum(si.line_discount),0), coalesce(sum(si.line_final_total),0)
+    INTO aggregated_original, aggregated_discount, aggregated_final
+    FROM sale_items si WHERE si.sale_id = target_sale;
   SELECT coalesce(sum(amount),0) INTO paid FROM sale_payments WHERE sale_id = target_sale;
-  IF stored.original_total <> line_original OR stored.discount_amount <> line_discount
-    OR stored.final_total <> line_final OR stored.final_total <> paid THEN
+  IF stored.original_total <> aggregated_original OR stored.discount_amount <> aggregated_discount
+    OR stored.final_total <> aggregated_final OR stored.final_total <> paid THEN
     RAISE EXCEPTION 'Sale totals mismatch for %', target_sale;
   END IF;
   RETURN NULL;
