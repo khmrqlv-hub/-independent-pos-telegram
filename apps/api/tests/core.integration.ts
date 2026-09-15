@@ -124,6 +124,30 @@ test("PostgreSQL cashier core integration", async () => {
     const adminCookie = cookieFrom(adminLogin);
     const cashierCookie = cookieFrom(cashierLogin);
 
+    const deniedAdminProducts = await app.inject({method:"GET",url:"/api/admin/products",headers:{cookie:cashierCookie}});
+    assert.equal(deniedAdminProducts.statusCode,403);
+    const createdCategory = await app.inject({method:"POST",url:"/api/admin/categories",headers:{origin:process.env.APP_ORIGIN!,cookie:adminCookie},
+      payload:{nameRu:"Админ QA",nameUz:"Admin QA"}});
+    assert.equal(createdCategory.statusCode,200,createdCategory.body);
+    const createdProduct = await app.inject({method:"POST",url:"/api/admin/products",headers:{origin:process.env.APP_ORIGIN!,cookie:adminCookie},payload:{
+      sku:"ADMIN-QA-1",barcode:"991234567890",nameRu:"Админ товар",nameUz:"Admin mahsulot",categoryId:createdCategory.json().id,
+      salePrice:"777000",purchasePrice:"555000",minimumStock:2,
+    }});
+    assert.equal(createdProduct.statusCode,200,createdProduct.body);
+    const restocked = await app.inject({method:"POST",url:`/api/admin/products/${createdProduct.json().id}/restock`,headers:{origin:process.env.APP_ORIGIN!,cookie:adminCookie},
+      payload:{quantity:5,purchasePrice:"560000",note:"Integration receipt"}});
+    assert.equal(restocked.statusCode,200,restocked.body); assert.equal(restocked.json().quantity,5);
+    const createdUser = await app.inject({method:"POST",url:"/api/admin/users",headers:{origin:process.env.APP_ORIGIN!,cookie:adminCookie},payload:{
+      login:"integration-created",displayName:"Created Cashier",password:"created-password-123",role:"CASHIER",locale:"uz",
+    }});
+    assert.equal(createdUser.statusCode,200,createdUser.body);
+    const [adminProductState]=await testSql<{quantity:number;purchasePrice:string;movements:number}[]>`SELECT p.quantity,p.purchase_price::text "purchasePrice",
+      (SELECT count(*)::int FROM stock_movements WHERE product_id=p.id AND type='RESTOCK') movements FROM products p WHERE p.id=${createdProduct.json().id}`;
+    assert.deepEqual(adminProductState,{quantity:5,purchasePrice:"560000",movements:1});
+    for(const url of ["/api/admin/users","/api/admin/audit?limit=100","/api/admin/dashboard","/api/admin/sales"]){
+      const response=await app.inject({method:"GET",url,headers:{cookie:adminCookie}}); assert.equal(response.statusCode,200,response.body);
+    }
+
     const cashierDenied = await app.inject({method: "POST", url: "/api/admin/telegram/link",
       headers: {origin: process.env.APP_ORIGIN!, cookie: cashierCookie},
       payload: {userId: cashierId, telegramUserId: 555001, allowed: true}});

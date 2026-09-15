@@ -1,6 +1,7 @@
 "use client";
 
 import {FormEvent, useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {AdminPanel} from "./AdminPanel";
 
 type Language = "ru" | "uz";
 type Role = "ADMIN" | "CASHIER";
@@ -57,6 +58,7 @@ export default function CashierPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [view, setView] = useState<"pos"|"admin">("pos");
   const searchRef = useRef<HTMLInputElement>(null);
   const t = text[language];
 
@@ -166,9 +168,9 @@ export default function CashierPage() {
 
   return <main className="appShell">
     <header><div><span className="eyebrow">Independent POS</span><h1>{t.title}</h1></div>
-      <div className="headerActions"><LanguageToggle language={language} setLanguage={setLanguage}/><button className="ghost" onClick={logout}>{t.logout}</button></div>
+      <div className="headerActions">{user.role==="ADMIN"&&<button className="ghost" onClick={()=>setView(view==="pos"?"admin":"pos")}>{view==="pos"?(language==="ru"?"Управление":"Boshqaruv"):t.title}</button>}<LanguageToggle language={language} setLanguage={setLanguage}/><button className="ghost" onClick={logout}>{t.logout}</button></div>
     </header>
-    <section className="workspace">
+    {view==="admin"&&user.role==="ADMIN"?<AdminPanel language={language}/>:<section className="workspace">
       <div className="catalogPanel">
         <label className="search"><span>⌕</span><input ref={searchRef} value={query} onChange={(event)=>setQuery(event.target.value)} placeholder={t.search} autoFocus/></label>
         {message && <div className="notice" role="status">{message}</div>}
@@ -192,7 +194,7 @@ export default function CashierPage() {
           <button className="sellButton" onClick={sell} disabled={busy||cart.length===0}>{busy?t.checking:t.sell}</button>
         </div>
       </aside>
-    </section>
+    </section>}
     {receipt&&<div className="modalBackdrop" role="presentation"><section className="receipt" role="dialog" aria-modal="true" aria-label={t.receipt}>
       <h2>{t.receipt} №{receipt.receiptNumber}</h2><time>{new Date(receipt.createdAt).toLocaleString(language==="ru"?"ru-RU":"uz-UZ")}</time>
       <div className="receiptTotal">{formatMoney(BigInt(receipt.finalTotal),language)}</div>
