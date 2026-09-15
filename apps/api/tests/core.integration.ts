@@ -337,6 +337,20 @@ test("PostgreSQL cashier core integration", async () => {
       assert.equal(BigInt(after.expenses)-BigInt(before.expenses), 1000000n);
       assert.equal(BigInt(after.netProfit)-BigInt(before.netProfit), 2500000n);
     }
+    const pdfUrls = [
+      `/api/reports/day/pdf?date=${calendar[0]!.date}`,
+      `/api/reports/month/pdf?month=${calendar[0]!.month}`,
+      `/api/reports/year/pdf?year=${calendar[0]!.year}`,
+    ];
+    const pdfReports = await Promise.all(pdfUrls.map((url) => app.inject({method: "GET",url,headers: {cookie: adminCookie}})));
+    for (let index = 0; index < pdfReports.length; index += 1) {
+      const pdf = pdfReports[index]!;
+      assert.equal(pdf.statusCode, 200, pdf.body);
+      assert.match(String(pdf.headers["content-type"]), /^application\/pdf/);
+      assert.equal(pdf.rawPayload.subarray(0,4).toString(), "%PDF");
+      assert.equal(pdf.headers["x-report-net-profit"], reportsAfter[index]!.json().netProfit);
+      assert.ok(pdf.rawPayload.length > 10_000);
+    }
     const productReport = await app.inject({method: "GET",
       url: `/api/reports/products?from=${encodeURIComponent(reportsAfter[0]!.json().from)}&to=${encodeURIComponent(reportsAfter[0]!.json().to)}&sort=profit`,
       headers: {cookie: adminCookie}});

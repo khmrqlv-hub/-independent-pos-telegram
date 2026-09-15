@@ -15,15 +15,18 @@
     "@fastify/cookie": "latest",
     "@fastify/cors": "latest",
     "@fastify/helmet": "latest",
+    "@fontsource/noto-sans": "^5.3.0",
     "@pos/contracts": "0.1.0",
     "@pos/domain": "0.1.0",
     "bcryptjs": "latest",
     "fastify": "latest",
+    "pdfkit": "^0.20.2",
     "postgres": "latest",
     "zod": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
+    "@types/pdfkit": "^0.17.6",
     "tsup": "latest",
     "tsx": "latest",
     "typescript": "latest"
