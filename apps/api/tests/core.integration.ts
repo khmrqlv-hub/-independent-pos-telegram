@@ -67,6 +67,8 @@ const idemProductId = randomUUID();
 const concurrentProductId = randomUUID();
 const rollbackProductId = randomUUID();
 const emptyProductId = randomUUID();
+const controlProductId = randomUUID();
+const controlReturnProductId = randomUUID();
 const password = "test-password-12345";
 const passwordHash = await bcrypt.hash(password, 4);
 
@@ -81,7 +83,9 @@ await testSql`INSERT INTO products(id,sku,barcode,name_ru,name_uz,category_id,sa
   (${idemProductId},'IDEM-1','990000000002','Idem RU','Idem UZ',${categoryId},200000,120000,30),
   (${concurrentProductId},'CONC-1','990000000003','Concurrent RU','Concurrent UZ',${categoryId},300000,180000,1),
   (${rollbackProductId},'ROLL-1','990000000004','Rollback RU','Rollback UZ',${categoryId},400000,250000,5),
-  (${emptyProductId},'EMPTY-1','990000000005','Empty RU','Empty UZ',${categoryId},500000,300000,0)`;
+  (${emptyProductId},'EMPTY-1','990000000005','Empty RU','Empty UZ',${categoryId},500000,300000,0),
+  (${controlProductId},'CONTROL-1','990000000006','Control RU','Control UZ',${categoryId},9500000,6000000,1),
+  (${controlReturnProductId},'CONTROL-RETURN-1','990000000007','Control Return RU','Control Return UZ',${categoryId},500000,0,1)`;
 await testSql`UPDATE app_settings SET cashier_max_discount_basis_points=2500 WHERE id=1`;
 
 function cookieFrom(response: {headers: Record<string, string | number | string[] | undefined>}) {
@@ -285,6 +289,61 @@ test("PostgreSQL cashier core integration", async () => {
       (SELECT count(*)::int FROM sale_requests sr WHERE sr.idempotency_key=${rollbackKey}) requests
       FROM products p WHERE p.id=${rollbackProductId}`;
     assert.deepEqual(rollbackState, {quantity: 5, sales: 0, requests: 0});
+
+    const calendar = await testSql<{date: string; month: string; year: string}[]>`SELECT
+      to_char(now() AT TIME ZONE 'Asia/Tashkent','YYYY-MM-DD') date,
+      to_char(now() AT TIME ZONE 'Asia/Tashkent','YYYY-MM') month,
+      to_char(now() AT TIME ZONE 'Asia/Tashkent','YYYY') year`;
+    const reportUrls = [
+      `/api/reports/day?date=${calendar[0]!.date}`,
+      `/api/reports/month?month=${calendar[0]!.month}`,
+      `/api/reports/year?year=${calendar[0]!.year}`,
+    ];
+    const deniedReport = await app.inject({method: "GET",url: reportUrls[0]!,headers: {cookie: cashierCookie}});
+    assert.equal(deniedReport.statusCode, 403);
+    const reportsBefore = await Promise.all(reportUrls.map((url) => app.inject({method: "GET",url,headers: {cookie: adminCookie}})));
+    for (const report of reportsBefore) assert.equal(report.statusCode, 200, report.body);
+    const controlSale = await app.inject({method: "POST",url: "/api/sales",
+      headers: {origin: process.env.APP_ORIGIN!,cookie: cashierCookie},payload: {
+        idempotencyKey: randomUUID(),discount: {type: "NONE"},paymentMethod: "CASH",
+        items: [
+          {productId: controlProductId,quantity: 1,expectedSalePrice: "9500000"},
+          {productId: controlReturnProductId,quantity: 1,expectedSalePrice: "500000"},
+        ],
+      }});
+    assert.equal(controlSale.statusCode, 200, controlSale.body);
+    assert.equal(controlSale.json().finalTotal, "10000000");
+    const controlReturnItem = await testSql<{id: string}[]>`SELECT id FROM sale_items
+      WHERE sale_id=${controlSale.json().saleId} AND product_id=${controlReturnProductId}`;
+    const controlReturn = await app.inject({method: "POST",url: "/api/returns",
+      headers: {origin: process.env.APP_ORIGIN!,cookie: cashierCookie},payload: {
+        idempotencyKey: randomUUID(),originalSaleId: controlSale.json().saleId,reason: "Control damaged return",
+        items: [{saleItemId: controlReturnItem[0]!.id,quantity: 1,restock: false}],
+      }});
+    assert.equal(controlReturn.statusCode, 200, controlReturn.body);
+    assert.equal(controlReturn.json().amount, "500000");
+    const controlExpense = await app.inject({method: "POST",url: "/api/expenses",
+      headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {
+        idempotencyKey: randomUUID(),categoryId: category[0]!.id,amount: "1000000",reason: "Control expense",
+      }});
+    assert.equal(controlExpense.statusCode, 200, controlExpense.body);
+    const reportsAfter = await Promise.all(reportUrls.map((url) => app.inject({method: "GET",url,headers: {cookie: adminCookie}})));
+    for (let index = 0; index < reportsAfter.length; index += 1) {
+      const before = reportsBefore[index]!.json();
+      const after = reportsAfter[index]!.json();
+      assert.equal(BigInt(after.salesRevenue)-BigInt(before.salesRevenue), 10000000n);
+      assert.equal(BigInt(after.returnsAmount)-BigInt(before.returnsAmount), 500000n);
+      assert.equal(BigInt(after.costOfGoods)-BigInt(before.costOfGoods), 6000000n);
+      assert.equal(BigInt(after.expenses)-BigInt(before.expenses), 1000000n);
+      assert.equal(BigInt(after.netProfit)-BigInt(before.netProfit), 2500000n);
+    }
+    const productReport = await app.inject({method: "GET",
+      url: `/api/reports/products?from=${encodeURIComponent(reportsAfter[0]!.json().from)}&to=${encodeURIComponent(reportsAfter[0]!.json().to)}&sort=profit`,
+      headers: {cookie: adminCookie}});
+    assert.equal(productReport.statusCode, 200, productReport.body);
+    const controlProduct = productReport.json().items.find((item: {productId: string}) => item.productId === controlProductId);
+    assert.deepEqual(controlProduct, {productId: controlProductId,nameRu: "Control RU",nameUz: "Control UZ",units: "1",
+      revenue: "9500000",cost: "6000000",grossProfit: "3500000",averagePrice: "9500000",returns: "0"});
 
     const persistedSaleCount = Number((await testSql`SELECT count(*)::int count FROM sales`)[0]!.count);
     await app.close();
