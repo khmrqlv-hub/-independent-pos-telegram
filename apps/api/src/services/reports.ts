@@ -63,29 +63,31 @@ export async function reportSummary({from, to}: Range) {
 export async function dailyBuckets({from, to}: Range) {
   return sql<{date: string; revenue: string}[]>`WITH days AS (
       SELECT generate_series((${from} AT TIME ZONE 'Asia/Tashkent')::date,
-        ((${to} AT TIME ZONE 'Asia/Tashkent')::date-1),interval '1 day')::date day
+        ((${to} AT TIME ZONE 'Asia/Tashkent')::date-1),interval '1 day')::date bucket_date
     ), sold AS (
-      SELECT (created_at AT TIME ZONE 'Asia/Tashkent')::date day,sum(final_total)::bigint amount FROM sales
+      SELECT (created_at AT TIME ZONE 'Asia/Tashkent')::date bucket_date,sum(final_total)::bigint amount FROM sales
       WHERE created_at>=${from} AND created_at<${to} GROUP BY 1
     ), refunded AS (
-      SELECT (r.created_at AT TIME ZONE 'Asia/Tashkent')::date day,sum(ri.amount)::bigint amount
+      SELECT (r.created_at AT TIME ZONE 'Asia/Tashkent')::date bucket_date,sum(ri.amount)::bigint amount
       FROM returns r JOIN return_items ri ON ri.return_id=r.id WHERE r.created_at>=${from} AND r.created_at<${to} GROUP BY 1
-    ) SELECT to_char(d.day,'YYYY-MM-DD') date,(coalesce(s.amount,0)-coalesce(r.amount,0))::text revenue
-      FROM days d LEFT JOIN sold s ON s.day=d.day LEFT JOIN refunded r ON r.day=d.day ORDER BY d.day`;
+    ) SELECT to_char(d.bucket_date,'YYYY-MM-DD') "date",(coalesce(s.amount,0)-coalesce(r.amount,0))::text revenue
+      FROM days d LEFT JOIN sold s ON s.bucket_date=d.bucket_date
+      LEFT JOIN refunded r ON r.bucket_date=d.bucket_date ORDER BY d.bucket_date`;
 }
 
 export async function monthlyBuckets({from, to}: Range) {
   return sql<{month: string; revenue: string}[]>`WITH months AS (
       SELECT generate_series(date_trunc('month',${from} AT TIME ZONE 'Asia/Tashkent'),
-        date_trunc('month',(${to} AT TIME ZONE 'Asia/Tashkent')-interval '1 second'),interval '1 month') month
+        date_trunc('month',(${to} AT TIME ZONE 'Asia/Tashkent')-interval '1 second'),interval '1 month') bucket_month
     ), sold AS (
-      SELECT date_trunc('month',created_at AT TIME ZONE 'Asia/Tashkent') month,sum(final_total)::bigint amount FROM sales
+      SELECT date_trunc('month',created_at AT TIME ZONE 'Asia/Tashkent') bucket_month,sum(final_total)::bigint amount FROM sales
       WHERE created_at>=${from} AND created_at<${to} GROUP BY 1
     ), refunded AS (
-      SELECT date_trunc('month',r.created_at AT TIME ZONE 'Asia/Tashkent') month,sum(ri.amount)::bigint amount
+      SELECT date_trunc('month',r.created_at AT TIME ZONE 'Asia/Tashkent') bucket_month,sum(ri.amount)::bigint amount
       FROM returns r JOIN return_items ri ON ri.return_id=r.id WHERE r.created_at>=${from} AND r.created_at<${to} GROUP BY 1
-    ) SELECT to_char(m.month,'YYYY-MM') month,(coalesce(s.amount,0)-coalesce(r.amount,0))::text revenue
-      FROM months m LEFT JOIN sold s ON s.month=m.month LEFT JOIN refunded r ON r.month=m.month ORDER BY m.month`;
+    ) SELECT to_char(m.bucket_month,'YYYY-MM') "month",(coalesce(s.amount,0)-coalesce(r.amount,0))::text revenue
+      FROM months m LEFT JOIN sold s ON s.bucket_month=m.bucket_month
+      LEFT JOIN refunded r ON r.bucket_month=m.bucket_month ORDER BY m.bucket_month`;
 }
 
 export async function productReport({from, to}: Range, sort: "quantity" | "revenue" | "profit") {
