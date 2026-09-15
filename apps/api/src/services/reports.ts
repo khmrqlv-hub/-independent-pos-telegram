@@ -91,7 +91,7 @@ export async function monthlyBuckets({from, to}: Range) {
 }
 
 export async function productReport({from, to}: Range, sort: "quantity" | "revenue" | "profit") {
-  const order = sort === "quantity" ? sql`units DESC` : sort === "revenue" ? sql`revenue DESC` : sql`gross_profit DESC`;
+  const order = sort === "quantity" ? sql`4 DESC` : sort === "revenue" ? sql`5 DESC` : sql`7 DESC`;
   return sql<{
     productId: string; nameRu: string; nameUz: string; units: string; revenue: string;
     cost: string; grossProfit: string; averagePrice: string; returns: string;
