@@ -82,6 +82,7 @@ await testSql`INSERT INTO products(id,sku,barcode,name_ru,name_uz,category_id,sa
   (${concurrentProductId},'CONC-1','990000000003','Concurrent RU','Concurrent UZ',${categoryId},300000,180000,1),
   (${rollbackProductId},'ROLL-1','990000000004','Rollback RU','Rollback UZ',${categoryId},400000,250000,5),
   (${emptyProductId},'EMPTY-1','990000000005','Empty RU','Empty UZ',${categoryId},500000,300000,0)`;
+await testSql`UPDATE app_settings SET cashier_max_discount_basis_points=2500 WHERE id=1`;
 
 function cookieFrom(response: {headers: Record<string, string | number | string[] | undefined>}) {
   const header = response.headers["set-cookie"];
