@@ -125,7 +125,7 @@ export async function adminRoutes(app: FastifyInstance) {
       COALESCE((SELECT sum(r.amount) FROM return_items r JOIN returns x ON x.id=r.return_id WHERE x.original_sale_id=s.id),0)::text "returnedAmount"
       FROM sales s JOIN users u ON u.id=s.cashier_id WHERE s.receipt_number>${input.cursor} ORDER BY s.receipt_number DESC LIMIT ${input.limit}`};});
 
-  app.get("/api/admin/dashboard", async request=>{await requireStaff(request,"ADMIN"); const today=await sql<{day:string}[]>`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date::text day`;
+  app.get("/api/admin/dashboard", async request=>{await requireStaff(request,"ADMIN"); const today=await sql<{day:string}[]>`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date::text "day"`;
     const day=today[0]!.day; const [stock]=await sql<{low:number;out:number}[]>`SELECT count(*) FILTER(WHERE quantity<=minimum_stock)::int low,count(*) FILTER(WHERE quantity=0)::int out FROM products WHERE active=true`;
     return {day,stock,recentSales:(await sql`SELECT receipt_number::text "receiptNumber",final_total::text "finalTotal",created_at "createdAt" FROM sales ORDER BY created_at DESC LIMIT 8`)};
   });
