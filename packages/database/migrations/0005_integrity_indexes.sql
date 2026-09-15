@@ -38,7 +38,11 @@ DECLARE
   line_final numeric;
   paid numeric;
 BEGIN
-  target_sale := CASE WHEN TG_TABLE_NAME = 'sales' THEN NEW.id ELSE NEW.sale_id END;
+  IF TG_TABLE_NAME = 'sales' THEN
+    target_sale := NEW.id;
+  ELSE
+    target_sale := NEW.sale_id;
+  END IF;
   SELECT * INTO stored FROM sales WHERE id = target_sale;
   SELECT coalesce(sum(line_original_total),0), coalesce(sum(line_discount),0), coalesce(sum(line_final_total),0)
     INTO line_original, line_discount, line_final FROM sale_items WHERE sale_id = target_sale;
@@ -68,4 +72,3 @@ BEGIN
 END $$;
 
 CREATE CONSTRAINT TRIGGER return_quantity_check AFTER INSERT ON return_items DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION verify_return_quantity();
-
