@@ -9,13 +9,16 @@
 | Frontend | PASS | Next.js production build |
 | Backend | PASS | Fastify bundle + typecheck |
 | Database design | PASS | 5 versioned PostgreSQL migrations, constraints and indexes |
-| Database runtime | UNKNOWN | PostgreSQL недоступен в текущем runner |
-| Auth | PARTIAL | signature/tamper/age unit PASS; runtime DB flow подготовлен, но не пройден |
+| Database runtime | PASS | PostgreSQL 16.4 GitHub Actions run 34953452516 |
+| Auth | PASS | Telegram signature/tamper/age, повторный login и password sessions |
 | Sale totals | PASS | bigint unit tests |
-| Atomic sale | UNKNOWN | код реализован, integration DB test не выполнен |
-| Idempotency | UNKNOWN | код реализован, 100-request DB test не выполнен |
-| Concurrent sale | UNKNOWN | locking/atomic guard реализованы, 20-request DB test не выполнен |
-| Stock | UNKNOWN | constraints/movements реализованы, runtime DB test не выполнен |
+| Atomic sale | PASS | sale/items/payment/stock movement в одной DB transaction |
+| Idempotency | PASS | 100 одинаковых запросов создали одну продажу и одно списание |
+| Concurrent sale | PASS | 20 запросов при остатке 1: один success, 19 insufficient, остаток 0 |
+| Stock | PASS | атомарное списание, movement и запрет отрицательного остатка |
+| Price/cost snapshots | PASS | старые sale_price_at_sale и purchase_price_at_sale не изменились |
+| Rollback | PASS | корзина с отсутствующим товаром не оставила sale/request/списание |
+| Restart/persistence | PASS | новая инстанция API прочитала сохранённую sale/session из PostgreSQL |
 | Returns | UNKNOWN | schema/constraints есть, API/UI ещё не реализованы |
 | Expenses | UNKNOWN | schema есть, API/UI ещё не реализованы |
 | Inventory | UNKNOWN | schema/versioning есть, workflow ещё не реализован |
@@ -23,11 +26,11 @@
 | Barcode | PARTIAL | cashier UI реализован, E2E не выполнен |
 | Print | PARTIAL | browser print реализован, device E2E не выполнен |
 | RU/UZ | PARTIAL | cashier UI реализован, полный административный UI отсутствует |
-| Roles | PARTIAL | backend ADMIN guard есть, полный permissions test не выполнен |
+| Roles | PASS | backend разрешил ADMIN и вернул 403 для CASHIER на admin endpoint |
 | Audit | PARTIAL | append-only DB и ключевые события есть; все workflows отсутствуют |
 | Security | PARTIAL | dependency audit 0 vulnerabilities; full security audit не выполнен |
-| Backup | PARTIAL | rotation script готов, реальный dump не выполнялся |
-| Restore | PARTIAL | guarded restore-test готов, PostgreSQL runtime отсутствует |
+| Backup | PASS | реальный `pg_dump` custom-format из test DB |
+| Restore | PASS | `pg_restore` в отдельную restore test DB и сверка критических таблиц |
 | Performance | UNKNOWN | indexes/pagination есть, load test не выполнен |
 | Mobile | PARTIAL | responsive CSS/safe areas есть, device matrix не выполнен |
 
@@ -38,21 +41,24 @@
 - `npm run build` — PASS для API, Web, contracts, database и domain.
 - `npm audit --omit=dev --audit-level=high` — 0 vulnerabilities.
 - `bash -n` для backup/restore — PASS.
+- PostgreSQL core integration — PASS: [GitHub Actions run 34953452516](https://github.com/khmrqlv-hub/-independent-pos-telegram/actions/runs/34953452516).
+- Test DB identity отличается от primary и restore DB; разрушительные операции ограничены БД с суффиксами `_test` и `_restore_test`.
+- 5 migrations — PASS.
+- Реальная sale/stock transaction, price/cost snapshots и rollback — PASS.
+- 100-request idempotency test — PASS, одна продажа.
+- 20-request concurrency test — PASS, один success, 19 insufficient stock, остаток 0.
+- Application restart/persistence — PASS.
+- Backup/restore со сверкой critical table counts и migration count — PASS.
 
-## Подготовлено, но не выполнено
+## PostgreSQL gate
 
-`apps/api/tests/core.integration.ts` выполняет на настоящем PostgreSQL полный
-checkpoint-gate: сравнение трёх database identity, 5 migrations, ADMIN/CASHIER,
-Telegram login и повторную авторизацию, sale/stock/snapshots, 100 одинаковых
-idempotency-запросов, 20 concurrent sales, rollback, restart, `pg_dump` и
-`pg_restore`. В текущем runner PostgreSQL невозможно запустить: процесс имеет UID
-root и не имеет capability сменить UID; `initdb` обоснованно отказывается. Защита
-не обходилась, PGlite/mock не использовались и PASS не присваивался.
-
-Для запуска без локального Docker добавлен изолированный GitHub Actions workflow
-`.github/workflows/postgresql-core.yml`: PostgreSQL 16.4 service, две отдельные
-test DB, закрытые CI-only credentials и отсутствие любых production secrets.
+`apps/api/tests/core.integration.ts` выполнен на настоящем PostgreSQL 16.4 в
+изолированном GitHub Actions runner. Workflow использует только временные CI-БД и
+CI-only credentials; production secrets и реальные данные не подключаются.
 
 ## Следующий обязательный шаг
 
-Поднять отдельные `pos` и `pos_test` PostgreSQL 16, доказать различие database identity, применить migrations только в test DB и выполнить integration-набор: migration, atomic sale, 20 concurrent sales при остатке 1, 100 одинаковых idempotency-запросов, partial return, reports, backup и restore. До этого нельзя выдавать staging URL кассиру или подключать BotFather Mini App URL.
+Реализовать и проверить серверные workflows возвратов, расходов и инвентаризации,
+затем отчёты. После этого нужны полноценные browser E2E, Telegram iPhone/Android
+device matrix, security/load audit и staging deployment. До их PASS нельзя
+подключать production BotFather Mini App URL.
