@@ -57,6 +57,25 @@ jobs:
         run: npm run check
       - name: PostgreSQL integration, concurrency and restore
         run: npm run test:integration
+      - name: Install E2E browser
+        run: npx playwright install --with-deps chromium
+      - name: Start isolated test application
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://pos_ci:ci-only-password@127.0.0.1:5432/pos_test
+          APP_ORIGIN: http://127.0.0.1:3000
+          API_INTERNAL_URL: http://127.0.0.1:4000
+          API_PORT: 4000
+          SESSION_COOKIE_NAME: pos_e2e_session
+          LOG_LEVEL: warn
+        run: |
+          npm run start --workspace=@pos/api > /tmp/pos-api.log 2>&1 &
+          npm run start --workspace=@pos/web > /tmp/pos-web.log 2>&1 &
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4000/health && curl -fsS http://127.0.0.1:3000/ && exit 0; sleep 1; done
+          cat /tmp/pos-api.log /tmp/pos-web.log
+          exit 1
+      - name: Telegram Mini App browser E2E
+        run: npm run test:e2e
       - name: Upload failed-test artifacts
         if: failure()
         uses: actions/upload-artifact@v4
