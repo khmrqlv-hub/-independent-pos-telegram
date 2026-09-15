@@ -213,7 +213,7 @@ test("PostgreSQL cashier core integration", async () => {
       headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {startKey: randomUUID(),note: "Conflict test"}});
     assert.equal(conflictInventory.statusCode, 200);
     const saleDuringInventory = await app.inject({method: "POST",url: "/api/sales",
-      headers: {origin: process.env.APP_ORIGIN!,cookie: cashierCookie},payload: salePayload(rollbackProductId,"400000")});
+      headers: {origin: process.env.APP_ORIGIN!,cookie: cashierCookie},payload: salePayload(snapshotProductId,"190000")});
     assert.equal(saleDuringInventory.statusCode, 200, saleDuringInventory.body);
     const conflictItems = await testSql<{productId: string; quantity: number}[]>`SELECT i.product_id "productId",p.quantity
       FROM inventory_items i JOIN products p ON p.id=i.product_id WHERE i.session_id=${conflictInventory.json().sessionId}`;
@@ -233,7 +233,7 @@ test("PostgreSQL cashier core integration", async () => {
     const inventoryItems = await testSql<{productId: string; quantity: number}[]>`SELECT i.product_id "productId",p.quantity
       FROM inventory_items i JOIN products p ON p.id=i.product_id WHERE i.session_id=${inventory.json().sessionId}`;
     for (const item of inventoryItems) {
-      const actualQuantity = item.productId === rollbackProductId ? 3 : item.quantity;
+      const actualQuantity = item.productId === snapshotProductId ? item.quantity - 1 : item.quantity;
       const counted = await app.inject({method: "POST",url: `/api/inventory/${inventory.json().sessionId}/count`,
         headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {productId: item.productId,actualQuantity}});
       assert.equal(counted.statusCode, 200, counted.body);
@@ -246,7 +246,7 @@ test("PostgreSQL cashier core integration", async () => {
       headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {}});
     assert.equal(inventoryReplay.statusCode, 200);
     assert.equal(inventoryReplay.json().replayed, true);
-    assert.equal(Number((await testSql`SELECT quantity FROM products WHERE id=${rollbackProductId}`)[0]!.quantity), 3);
+    assert.equal(Number((await testSql`SELECT quantity FROM products WHERE id=${snapshotProductId}`)[0]!.quantity), 7);
 
     const idemKey = randomUUID();
     const idemRequest = {method: "POST" as const, url: "/api/sales", headers: {origin: process.env.APP_ORIGIN!, cookie: cashierCookie},
