@@ -73,8 +73,9 @@ export async function createSale(input: SaleInput, actor: StaffUser, requestMeta
     });
     const calculation = calculateSale(priced, toDiscount(input.discount));
     if (actor.role === "CASHIER") {
-      const settings = await transaction<{limit: number}[]>`SELECT cashier_max_discount_basis_points limit FROM app_settings WHERE id=1`;
-      const limit = settings[0]?.limit ?? 0;
+      const settings = await transaction<{discountLimit: number}[]>`
+        SELECT cashier_max_discount_basis_points AS "discountLimit" FROM app_settings WHERE id=1`;
+      const limit = settings[0]?.discountLimit ?? 0;
       if (calculation.originalTotal > 0n && calculation.discountAmount * 10_000n > calculation.originalTotal * BigInt(limit)) {
         throw new HttpError(403, "Cashier discount limit exceeded", "DISCOUNT_LIMIT");
       }
