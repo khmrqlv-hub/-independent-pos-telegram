@@ -39,7 +39,7 @@ await testSql.unsafe("DROP SCHEMA public CASCADE; CREATE SCHEMA public");
 await testSql.unsafe("CREATE TABLE schema_migrations(version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
 const migrationDir = resolve(process.cwd(), "../../packages/database/migrations");
 const migrationFiles = (await readdir(migrationDir)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-assert.equal(migrationFiles.length, 5);
+assert.equal(migrationFiles.length, 6);
 for (const file of migrationFiles) {
   const migration = await readFile(join(migrationDir, file), "utf8");
   await testSql.begin(async (tx) => {
@@ -158,6 +158,96 @@ test("PostgreSQL cashier core integration", async () => {
       (SELECT count(*)::int FROM stock_movements m WHERE m.product_id=p.id) movements FROM products p WHERE p.id=${snapshotProductId}`;
     assert.deepEqual(snapshotStock, {quantity: 8, movements: 1});
 
+    const soldItem = await testSql<{id: string}[]>`SELECT id FROM sale_items WHERE sale_id=${snapshotSale.json().saleId}`;
+    const firstReturnKey = randomUUID();
+    const firstReturnRequest = {method: "POST" as const, url: "/api/returns",
+      headers: {origin: process.env.APP_ORIGIN!, cookie: cashierCookie}, payload: {
+        idempotencyKey: firstReturnKey, originalSaleId: snapshotSale.json().saleId, reason: "Damaged",
+        items: [{saleItemId: soldItem[0]!.id, quantity: 1, restock: false}],
+      }};
+    const repeatedReturns = await Promise.all(Array.from({length: 20}, () => app.inject(firstReturnRequest)));
+    assert.equal(repeatedReturns.filter((response) => response.statusCode === 200).length, 20);
+    assert.equal(new Set(repeatedReturns.map((response) => response.json().returnId)).size, 1);
+    assert.equal(repeatedReturns[0]!.json().amount, "125000");
+    assert.equal(repeatedReturns[0]!.json().costAmount, "100000");
+    const secondReturn = await app.inject({method: "POST", url: "/api/returns",
+      headers: {origin: process.env.APP_ORIGIN!, cookie: cashierCookie}, payload: {
+        idempotencyKey: randomUUID(), originalSaleId: snapshotSale.json().saleId, reason: "Unopened",
+        items: [{saleItemId: soldItem[0]!.id, quantity: 1, restock: true}],
+      }});
+    assert.equal(secondReturn.statusCode, 200, secondReturn.body);
+    assert.equal(secondReturn.json().amount, "125000");
+    const excessiveReturn = await app.inject({method: "POST", url: "/api/returns",
+      headers: {origin: process.env.APP_ORIGIN!, cookie: cashierCookie}, payload: {
+        idempotencyKey: randomUUID(), originalSaleId: snapshotSale.json().saleId, reason: "Too many",
+        items: [{saleItemId: soldItem[0]!.id, quantity: 1, restock: true}],
+      }});
+    assert.equal(excessiveReturn.statusCode, 409);
+    assert.equal(excessiveReturn.json().code, "RETURN_QUANTITY_EXCEEDED");
+    const [returnState] = await testSql<{quantity: number; returns: number; movements: number}[]>`SELECT p.quantity,
+      (SELECT count(*)::int FROM return_items ri WHERE ri.product_id=p.id) returns,
+      (SELECT count(*)::int FROM stock_movements sm WHERE sm.product_id=p.id AND sm.type IN ('RETURN','RETURN_NO_RESTOCK')) movements
+      FROM products p WHERE p.id=${snapshotProductId}`;
+    assert.deepEqual(returnState, {quantity: 9, returns: 2, movements: 2});
+
+    const category = await testSql<{id: string}[]>`SELECT id FROM expense_categories ORDER BY id LIMIT 1`;
+    const cashierExpense = await app.inject({method: "POST", url: "/api/expenses",
+      headers: {origin: process.env.APP_ORIGIN!, cookie: cashierCookie}, payload: {
+        idempotencyKey: randomUUID(),categoryId: category[0]!.id,amount: "1000000",reason: "Denied",
+      }});
+    assert.equal(cashierExpense.statusCode, 403);
+    const expenseKey = randomUUID();
+    const expenseRequest = {method: "POST" as const,url: "/api/expenses",
+      headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {
+        idempotencyKey: expenseKey,categoryId: category[0]!.id,amount: "1000000",reason: "Integration expense",
+      }};
+    const repeatedExpenses = await Promise.all(Array.from({length: 20}, () => app.inject(expenseRequest)));
+    assert.equal(repeatedExpenses.filter((response) => response.statusCode === 200).length, 20);
+    assert.equal(new Set(repeatedExpenses.map((response) => response.json().expenseId)).size, 1);
+    assert.equal(Number((await testSql`SELECT count(*)::int count FROM expenses WHERE idempotency_key=${expenseKey}`)[0]!.count), 1);
+
+    const cashierInventory = await app.inject({method: "POST",url: "/api/inventory",
+      headers: {origin: process.env.APP_ORIGIN!,cookie: cashierCookie},payload: {startKey: randomUUID()}});
+    assert.equal(cashierInventory.statusCode, 403);
+    const conflictInventory = await app.inject({method: "POST",url: "/api/inventory",
+      headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {startKey: randomUUID(),note: "Conflict test"}});
+    assert.equal(conflictInventory.statusCode, 200);
+    const saleDuringInventory = await app.inject({method: "POST",url: "/api/sales",
+      headers: {origin: process.env.APP_ORIGIN!,cookie: cashierCookie},payload: salePayload(rollbackProductId,"400000")});
+    assert.equal(saleDuringInventory.statusCode, 200, saleDuringInventory.body);
+    const conflictItems = await testSql<{productId: string; quantity: number}[]>`SELECT i.product_id "productId",p.quantity
+      FROM inventory_items i JOIN products p ON p.id=i.product_id WHERE i.session_id=${conflictInventory.json().sessionId}`;
+    for (const item of conflictItems) {
+      const counted = await app.inject({method: "POST",url: `/api/inventory/${conflictInventory.json().sessionId}/count`,
+        headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {productId: item.productId,actualQuantity: item.quantity}});
+      assert.equal(counted.statusCode, 200, counted.body);
+    }
+    const conflictCompletion = await app.inject({method: "POST",url: `/api/inventory/${conflictInventory.json().sessionId}/complete`,
+      headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {}});
+    assert.equal(conflictCompletion.statusCode, 409);
+    assert.equal(conflictCompletion.json().code, "INVENTORY_CONFLICT");
+
+    const inventory = await app.inject({method: "POST",url: "/api/inventory",
+      headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {startKey: randomUUID(),note: "Completion test"}});
+    assert.equal(inventory.statusCode, 200);
+    const inventoryItems = await testSql<{productId: string; quantity: number}[]>`SELECT i.product_id "productId",p.quantity
+      FROM inventory_items i JOIN products p ON p.id=i.product_id WHERE i.session_id=${inventory.json().sessionId}`;
+    for (const item of inventoryItems) {
+      const actualQuantity = item.productId === rollbackProductId ? 3 : item.quantity;
+      const counted = await app.inject({method: "POST",url: `/api/inventory/${inventory.json().sessionId}/count`,
+        headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {productId: item.productId,actualQuantity}});
+      assert.equal(counted.statusCode, 200, counted.body);
+    }
+    const inventoryCompletion = await app.inject({method: "POST",url: `/api/inventory/${inventory.json().sessionId}/complete`,
+      headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {}});
+    assert.equal(inventoryCompletion.statusCode, 200, inventoryCompletion.body);
+    assert.equal(inventoryCompletion.json().adjustments, 1);
+    const inventoryReplay = await app.inject({method: "POST",url: `/api/inventory/${inventory.json().sessionId}/complete`,
+      headers: {origin: process.env.APP_ORIGIN!,cookie: adminCookie},payload: {}});
+    assert.equal(inventoryReplay.statusCode, 200);
+    assert.equal(inventoryReplay.json().replayed, true);
+    assert.equal(Number((await testSql`SELECT quantity FROM products WHERE id=${rollbackProductId}`)[0]!.quantity), 3);
+
     const idemKey = randomUUID();
     const idemRequest = {method: "POST" as const, url: "/api/sales", headers: {origin: process.env.APP_ORIGIN!, cookie: cashierCookie},
       payload: salePayload(idemProductId, "200000", idemKey)};
@@ -228,13 +318,19 @@ test("PostgreSQL cashier core integration", async () => {
     const sourceCounts = await source`SELECT
       (SELECT count(*)::int FROM users) users,(SELECT count(*)::int FROM products) products,
       (SELECT count(*)::int FROM sales) sales,(SELECT count(*)::int FROM sale_items) sale_items,
+      (SELECT count(*)::int FROM returns) returns,(SELECT count(*)::int FROM return_items) return_items,
+      (SELECT count(*)::int FROM expenses) expenses,(SELECT count(*)::int FROM inventory_sessions) inventory_sessions,
+      (SELECT count(*)::int FROM inventory_items) inventory_items,
       (SELECT count(*)::int FROM stock_movements) stock_movements,(SELECT count(*)::int FROM audit_log) audit_log`;
     const restoredCounts = await restored`SELECT
       (SELECT count(*)::int FROM users) users,(SELECT count(*)::int FROM products) products,
       (SELECT count(*)::int FROM sales) sales,(SELECT count(*)::int FROM sale_items) sale_items,
+      (SELECT count(*)::int FROM returns) returns,(SELECT count(*)::int FROM return_items) return_items,
+      (SELECT count(*)::int FROM expenses) expenses,(SELECT count(*)::int FROM inventory_sessions) inventory_sessions,
+      (SELECT count(*)::int FROM inventory_items) inventory_items,
       (SELECT count(*)::int FROM stock_movements) stock_movements,(SELECT count(*)::int FROM audit_log) audit_log`;
     assert.deepEqual(restoredCounts[0], sourceCounts[0]);
-    assert.equal(Number((await restored`SELECT count(*)::int count FROM schema_migrations`)[0]!.count), 5);
+    assert.equal(Number((await restored`SELECT count(*)::int count FROM schema_migrations`)[0]!.count), 6);
   } finally {
     await source.end();
     await restored.end();

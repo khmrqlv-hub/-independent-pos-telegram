@@ -31,7 +31,43 @@ export const productSearchInput = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(40),
 });
 
+export const returnInput = z.object({
+  idempotencyKey: z.string().uuid(),
+  originalSaleId: z.string().uuid(),
+  reason: z.string().trim().min(1).max(1000),
+  items: z.array(z.object({
+    saleItemId: z.string().uuid(),
+    quantity: z.number().int().positive().max(100_000),
+    restock: z.boolean(),
+  })).min(1).max(200),
+});
+
+export const expenseInput = z.object({
+  idempotencyKey: z.string().uuid(),
+  categoryId: z.string().uuid(),
+  amount: integerMoney.refine((value) => BigInt(value) > 0n),
+  reason: z.string().trim().min(1).max(1000),
+});
+
+export const inventoryStartInput = z.object({
+  startKey: z.string().uuid(),
+  note: z.string().trim().max(1000).optional(),
+});
+
+export const inventoryCountInput = z.object({
+  productId: z.string().uuid(),
+  actualQuantity: z.number().int().min(0).max(2_147_483_647),
+});
+
+export const reportPeriodInput = z.object({
+  from: z.string().datetime({offset: true}),
+  to: z.string().datetime({offset: true}),
+}).refine(({from, to}) => new Date(from) < new Date(to), {message: "Invalid report period"});
+
 export type LoginInput = z.infer<typeof loginInput>;
 export type TelegramLoginInput = z.infer<typeof telegramLoginInput>;
 export type SaleInput = z.infer<typeof saleInput>;
-
+export type ReturnInput = z.infer<typeof returnInput>;
+export type ExpenseInput = z.infer<typeof expenseInput>;
+export type InventoryStartInput = z.infer<typeof inventoryStartInput>;
+export type InventoryCountInput = z.infer<typeof inventoryCountInput>;
