@@ -292,8 +292,8 @@ test("PostgreSQL cashier core integration", async () => {
 
     const calendar = await testSql<{date: string; month: string; year: string}[]>`SELECT
       to_char(now() AT TIME ZONE 'Asia/Tashkent','YYYY-MM-DD') date,
-      to_char(now() AT TIME ZONE 'Asia/Tashkent','YYYY-MM') month,
-      to_char(now() AT TIME ZONE 'Asia/Tashkent','YYYY') year`;
+      to_char(now() AT TIME ZONE 'Asia/Tashkent','YYYY-MM') "month",
+      to_char(now() AT TIME ZONE 'Asia/Tashkent','YYYY') "year"`;
     const reportUrls = [
       `/api/reports/day?date=${calendar[0]!.date}`,
       `/api/reports/month?month=${calendar[0]!.month}`,
