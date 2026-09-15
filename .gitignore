@@ -1,0 +1,14 @@
+node_modules/
+.next/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+backups/
+playwright-report/
+test-results/
+.test-artifacts/
+*.log
+*.tsbuildinfo
+.DS_Store

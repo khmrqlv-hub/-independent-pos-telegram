@@ -1,0 +1,31 @@
+{
+  "name": "@pos/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "test:integration": "node --import tsx --test tests/core.integration.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "latest",
+    "@fastify/cors": "latest",
+    "@fastify/helmet": "latest",
+    "@pos/contracts": "0.1.0",
+    "@pos/domain": "0.1.0",
+    "bcryptjs": "latest",
+    "fastify": "latest",
+    "postgres": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsup": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
