@@ -58,7 +58,7 @@ jobs:
       - name: PostgreSQL integration, concurrency and restore
         run: npm run test:integration
       - name: Install E2E browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
       - name: Start isolated test application
         env:
           NODE_ENV: test

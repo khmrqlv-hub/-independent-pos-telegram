@@ -5,7 +5,7 @@ import {FormEvent,useCallback,useEffect,useState} from "react";
 type Language="ru"|"uz";
 type Category={id:string;nameRu:string;nameUz:string;active:boolean};
 type Product={id:string;sku:string;barcode:string|null;nameRu:string;nameUz:string;categoryId:string;salePrice:string;purchasePrice:string;quantity:number;minimumStock:number};
-type Summary={originalRevenue:string;discount:string;actualRevenue:string;returns:string;costOfGoods:string;grossProfit:string;expenses:string;netProfit:string;checks:number;averageCheck:string};
+type Summary={originalRevenue:string;discountAmount:string;actualRevenue:string;returnsAmount:string;costOfGoods:string;grossProfit:string;expenses:string;netProfit:string;checks:number;averageCheck:string};
 type User={id:string;login:string;displayName:string;role:"ADMIN"|"CASHIER";locale:Language;active:boolean};
 type Audit={id:string;userName:string|null;action:string;entityType:string;entityId:string;createdAt:string};
 
@@ -40,7 +40,7 @@ export function AdminPanel({language}:{language:Language}){
     {(tab==="dashboard"||tab==="reports")&&<div>
       {tab==="reports"&&<div className="reportToolbar"><input type="date" value={reportDate} onChange={e=>setReportDate(e.target.value)}/><a className="buttonLink" href={`/api/reports/day/pdf?date=${reportDate}`} target="_blank">PDF</a></div>}
       {summary&&<div className="metricGrid">{[
-        [ru?"Выручка":"Tushum",summary.actualRevenue],[ru?"Валовая прибыль":"Yalpi foyda",summary.grossProfit],[ru?"Расходы":"Xarajatlar",summary.expenses],[ru?"Чистая прибыль":"Sof foyda",summary.netProfit],[ru?"Торг":"Chegirma",summary.discount],[ru?"Возвраты":"Qaytarish",summary.returns],[ru?"Чеки":"Cheklar",String(summary.checks)],[ru?"Средний чек":"O‘rtacha chek",summary.averageCheck]
+        [ru?"Выручка":"Tushum",summary.actualRevenue],[ru?"Валовая прибыль":"Yalpi foyda",summary.grossProfit],[ru?"Расходы":"Xarajatlar",summary.expenses],[ru?"Чистая прибыль":"Sof foyda",summary.netProfit],[ru?"Торг":"Chegirma",summary.discountAmount],[ru?"Возвраты":"Qaytarish",summary.returnsAmount],[ru?"Чеки":"Cheklar",String(summary.checks)],[ru?"Средний чек":"O‘rtacha chek",summary.averageCheck]
       ].map(([label,value],i)=><article className={i===3?"metric accent":"metric"} key={label}><span>{label}</span><strong>{i===6?value:money(value!,language)}</strong></article>)}</div>}
     </div>}
     {tab==="catalog"&&<div className="adminColumns"><div>
