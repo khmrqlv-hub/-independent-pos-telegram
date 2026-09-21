@@ -1,6 +1,6 @@
 # GadgetCashier staging deployment
 
-Status: configuration prepared; container build and live deployment NOT VERIFIED.
+Status: Railway staging provisioned on 2026-09-21; deployment acceptance is recorded below.
 Do not use this as permission to launch a real store. See project-status.md for release blockers.
 
 ## Isolation
@@ -16,6 +16,10 @@ Build from repository root using Dockerfile targets:
 - `api`: Fastify on port 4000, accessible only to the web service/private network.
 - `web`: Next.js on port 3000, with one public HTTPS domain.
 - `migrations`: one-shot migration command with a database owner credential.
+
+For Railway, the final runtime defaults to `api`; set the non-secret build variable
+`POS_SERVICE=web` for the frontend. API uses `PORT=4000` and `API_PORT=4000`;
+web uses `PORT=3000`. API listens on `::` for private IPv6 and local IPv4.
 
 The web build requires `API_INTERNAL_URL` (e.g. `http://api:4000`, replaced with the
 actual private service hostname). Next.js embeds the rewrite destination during build.
@@ -53,8 +57,28 @@ must pass before any production rollout.
 
 ## Verification still required
 
-- Build all Docker targets on a Docker-capable runner (Docker is unavailable in this workspace).
+- Docker images, typecheck, unit, PostgreSQL integration/restore and E2E passed in
+  GitHub Actions run 35617356173 for commit 7153258f33a0496747235712b61d8fa16eac9ad1.
 - Verify private connectivity, migrations, least-privilege runtime role and HTTPS cookie flow.
 - Verify Telegram account link, signed login and access denial for unapproved accounts.
 - Configure separate backup storage and scheduled restore drills; CI backup tests alone are insufficient.
-- No staging URL, service or database has been created by adding these files.
+
+## Provisioned environment (no production deployment)
+
+- Railway project: `88ffae3e-c84d-4aca-aece-7e15b978b0d2`.
+- Staging environment: `5f624b56-e2ba-44b5-b1a4-d5ffbcd817ea` (display name has a trailing space).
+- Postgres: `6ee25dc1-70a0-45dd-a3d9-1323463831df`, PostgreSQL 18, persistent 500 MB volume.
+- API: `7826cc93-a4b2-42d7-8939-f2c3b733915f`, private network only.
+- Web: `31a84cc6-9de3-4e30-8bbf-f655a2e215e7`.
+- Assigned web origin: https://pos-web-staging.up.railway.app.
+- API pre-deploy runs `npm run db:migrate`; logs confirm 0001 through 0006 applied.
+- No old database, service, Floot API or shop bot used. No real data imported.
+- Telegram token and initial administrator are NOT configured. Login is not yet usable.
+- Current staging DATABASE_URL references Postgres's owner credential. A restricted
+  runtime role remains REQUIRED before real use; do not treat this setup as security PASS.
+- API deployment `f342a25c-1bf7-4fc1-9d41-f739fcaed6fb`: SUCCESS.
+- Web deployment `c32bc8dd-db6f-4e44-82c3-214727cadb6b`: SUCCESS.
+- Live HTTPS `/health` verified: `{"app":"ok","database":"ok"}`.
+- Both deployed services use code commit `7153258f33a0496747235712b61d8fa16eac9ad1`.
+- Next: securely configure a freshly rotated bot token and initial administrator,
+  restrict the runtime DB role, then verify real Telegram login. Never reuse the chat token.
