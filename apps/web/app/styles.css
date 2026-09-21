@@ -12,4 +12,5 @@
 @media(max-width:390px){.productGrid{grid-template-columns:1fr}.productCard{min-height:118px}.languageToggle button{min-width:36px}.cartLine{grid-template-columns:minmax(0,1fr) auto}.payments{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:420px){.metricGrid,.formGrid{grid-template-columns:1fr}.metric{padding:15px}.auditTable article{grid-template-columns:1fr}.headerActions{gap:4px}.headerActions>.ghost{padding:0 7px;font-size:13px}}
 .loginCard input,.search input,.discountRow input,.discountRow select,.search,.productCard,.ghost,.payments button,.receiptActions button,.receipt{background:var(--panel);color:var(--ink)}
+.receipt{max-height:90dvh;overflow:auto}.receiptLine{display:grid;text-align:left;gap:4px;padding:10px 0;border-bottom:1px dashed var(--line)}.receiptLine span{color:var(--muted);font-size:14px}.receiptLine b{text-align:right}
 @media print{body{background:#fff}.appShell>header,.workspace{display:none!important}.modalBackdrop{position:static;display:block;background:none;padding:0;backdrop-filter:none}.receipt{display:block;box-shadow:none;border:0;width:100%;padding:0}.receiptActions{display:none}}

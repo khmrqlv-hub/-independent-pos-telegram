@@ -11,7 +11,7 @@ type Product = {
   categoryRu: string; categoryUz: string; salePrice: string; quantity: number;
 };
 type CartLine = {product: Product; quantity: number};
-type Receipt = {receiptNumber: string; createdAt: string; originalTotal: string; discountAmount: string; finalTotal: string; paymentMethod: string};
+type Receipt = {saleId:string;receiptNumber: string; createdAt: string; originalTotal: string; discountAmount: string; finalTotal: string; paymentMethod: string;cashierName?:string;items?:Array<{id:string;nameRu:string;nameUz:string;quantity:number;salePrice:string;finalTotal:string}>};
 
 declare global {
   interface Window {
@@ -146,6 +146,7 @@ export default function CashierPage() {
     try {
       const result = await api<Receipt>("/api/sales", {method:"POST",body:JSON.stringify(body)});
       localStorage.removeItem(storageKey); setReceipt(result); setCart([]); setDiscount("0");
+      api<Receipt>(`/api/sales/${result.saleId}`).then(setReceipt).catch(()=>setMessage(language==="ru"?"Продажа сохранена. Не удалось загрузить позиции чека.":"Sotuv saqlandi. Chek satrlarini yuklab bo‘lmadi."));
     } catch (error) {
       setMessage(!navigator.onLine ? t.checking : error instanceof Error ? error.message : t.checking);
     } finally {setBusy(false);}
@@ -196,7 +197,10 @@ export default function CashierPage() {
       </aside>
     </section>}
     {receipt&&<div className="modalBackdrop" role="presentation"><section className="receipt" role="dialog" aria-modal="true" aria-label={t.receipt}>
-      <h2>{t.receipt} №{receipt.receiptNumber}</h2><time>{new Date(receipt.createdAt).toLocaleString(language==="ru"?"ru-RU":"uz-UZ")}</time>
+      <h2>{t.receipt} №{receipt.receiptNumber}</h2><time>{new Date(receipt.createdAt).toLocaleString(language==="ru"?"ru-RU":"uz-UZ",{timeZone:"Asia/Tashkent"})}</time>
+      <p>{receipt.cashierName}</p>
+      {receipt.items?.map(item=><article className="receiptLine" key={item.id}><strong>{language==="ru"?item.nameRu:item.nameUz}</strong><span>{item.quantity} × {formatMoney(BigInt(item.salePrice),language)}</span><b>{formatMoney(BigInt(item.finalTotal),language)}</b></article>)}
+      <p>{t.subtotal}: {formatMoney(BigInt(receipt.originalTotal),language)}</p><p>{t.bargain}: {formatMoney(BigInt(receipt.discountAmount),language)}</p>
       <div className="receiptTotal">{formatMoney(BigInt(receipt.finalTotal),language)}</div>
       <p>{paymentLabels(t)[receipt.paymentMethod as keyof ReturnType<typeof paymentLabels>]}</p>
       <div className="receiptActions"><button onClick={()=>window.print()}>{t.print}</button><button className="primary" onClick={()=>{setReceipt(null);searchRef.current?.focus();}}>{t.newSale}</button></div>

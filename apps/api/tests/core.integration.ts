@@ -182,6 +182,14 @@ test("PostgreSQL cashier core integration", async () => {
       SELECT sale_price_at_sale::text "salePrice",purchase_price_at_sale::text "purchasePrice",quantity,
         line_final_total::text "finalTotal" FROM sale_items WHERE sale_id=${snapshotSale.json().saleId}`;
     assert.deepEqual(snapshots[0], {salePrice: "150000", purchasePrice: "100000", quantity: 2, finalTotal: "250000"});
+    const receipt=await app.inject({method:"GET",url:`/api/sales/${snapshotSale.json().saleId}`,headers:{cookie:cashierCookie}});
+    assert.equal(receipt.statusCode,200,receipt.body);
+    assert.equal(receipt.json().items[0].salePrice,"150000");
+    assert.equal(receipt.json().items[0].finalTotal,"250000");
+    assert.equal(receipt.json().cashierName,"Integration Cashier");
+    assert.equal(JSON.stringify(receipt.json()).includes("purchasePrice"),false);
+    const anonymousReceipt=await app.inject({method:"GET",url:`/api/sales/${snapshotSale.json().saleId}`});
+    assert.equal(anonymousReceipt.statusCode,401);
     const [snapshotStock] = await testSql<{quantity: number; movements: number}[]>`SELECT p.quantity,
       (SELECT count(*)::int FROM stock_movements m WHERE m.product_id=p.id) movements FROM products p WHERE p.id=${snapshotProductId}`;
     assert.deepEqual(snapshotStock, {quantity: 8, movements: 1});
