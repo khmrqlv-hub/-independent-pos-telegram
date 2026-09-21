@@ -69,6 +69,7 @@ jobs:
           SESSION_COOKIE_NAME: pos_e2e_session
           LOG_LEVEL: warn
         run: |
+          export TELEGRAM_BOT_TOKEN="1234567890:test-only-token-material"
           npm run start --workspace=@pos/api > /tmp/pos-api.log 2>&1 &
           npm run start --workspace=@pos/web > /tmp/pos-web.log 2>&1 &
           for i in {1..30}; do curl -fsS http://127.0.0.1:4000/health && curl -fsS http://127.0.0.1:3000/ && exit 0; sleep 1; done

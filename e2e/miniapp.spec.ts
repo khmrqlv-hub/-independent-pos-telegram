@@ -1,4 +1,27 @@
 import {expect,test} from "@playwright/test";
+import {createHmac,randomUUID} from "node:crypto";
+
+test("Telegram signed initData logs in through backend",async({page})=>{
+  const params=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),query_id:randomUUID(),user:JSON.stringify({id:555001,first_name:"QA"})});
+  const check=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join("\n");
+  const secret=createHmac("sha256","WebAppData").update(["1234567890","test-only-token-material"].join(":")).digest();
+  params.set("hash",createHmac("sha256",secret).update(check).digest("hex"));
+  await page.route("https://telegram.org/js/telegram-web-app.js*",route=>route.fulfill({contentType:"text/javascript",body:""}));
+  await page.addInitScript(initData=>{(window as unknown as {Telegram:unknown}).Telegram={WebApp:{initData,ready(){},expand(){}}};},params.toString());
+  await page.goto("/");
+  await expect(page.getByRole("heading",{name:"Касса"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Управление"})).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading",{name:"Касса"})).toBeVisible();
+});
+
+test("Telegram initDataUnsafe cannot authenticate",async({page})=>{
+  await page.route("https://telegram.org/js/telegram-web-app.js*",route=>route.fulfill({contentType:"text/javascript",body:""}));
+  await page.addInitScript(()=>{(window as unknown as {Telegram:unknown}).Telegram={WebApp:{initData:"tampered",initDataUnsafe:{user:{id:555001}},ready(){},expand(){}}};});
+  await page.goto("/");
+  await expect(page.getByRole("button",{name:"Войти"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"ПРОДАТЬ"})).toHaveCount(0);
+});
 
 async function login(page:import("@playwright/test").Page,identifier:string){
   await page.goto("/"); await page.getByLabel("Логин / email / телефон").fill(identifier);
