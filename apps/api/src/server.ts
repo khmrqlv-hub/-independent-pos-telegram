@@ -11,4 +11,5 @@ const shutdown = async () => {
 process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);
 
-await app.listen({port: config.API_PORT, host: "0.0.0.0"});
+// Dual-stack listener supports Railway private IPv6 networking and local IPv4.
+await app.listen({port: config.API_PORT, host: "::"});

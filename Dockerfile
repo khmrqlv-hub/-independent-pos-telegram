@@ -1,3 +1,4 @@
+ARG POS_SERVICE=api
 FROM node:24-bookworm-slim AS source
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -33,3 +34,7 @@ FROM source AS migrations
 ENV NODE_ENV=production
 USER node
 CMD ["npm", "run", "db:migrate"]
+
+# Railway selects the runtime using a non-secret build argument.
+# Migrations are an explicit pre-deploy command, never the default runtime.
+FROM ${POS_SERVICE} AS runtime

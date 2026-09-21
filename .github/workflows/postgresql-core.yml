@@ -20,8 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build independent staging images without secrets
         run: |
-          docker build --target api -t pos-api:test .
-          docker build --target web --build-arg API_INTERNAL_URL=http://api:4000 -t pos-web:test .
+          docker build -t pos-api:test .
+          docker build --build-arg POS_SERVICE=web --build-arg API_INTERNAL_URL=http://api:4000 -t pos-web:test .
           docker build --target migrations -t pos-migrations:test .
   core:
     runs-on: ubuntu-24.04
