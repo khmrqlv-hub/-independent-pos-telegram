@@ -13,6 +13,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  staging-images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build independent staging images without secrets
+        run: |
+          docker build --target api -t pos-api:test .
+          docker build --target web --build-arg API_INTERNAL_URL=http://api:4000 -t pos-web:test .
+          docker build --target migrations -t pos-migrations:test .
   core:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
