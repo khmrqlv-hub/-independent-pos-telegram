@@ -73,12 +73,13 @@ must pass before any production rollout.
 - Assigned web origin: https://pos-web-staging.up.railway.app.
 - API pre-deploy runs `npm run db:migrate`; logs confirm 0001 through 0006 applied.
 - No old database, service, Floot API or shop bot used. No real data imported.
-- Telegram token and initial administrator are NOT configured. Login is not yet usable.
+- Initial administrator provisioned on 2026-09-22. Live password login, ADMIN role, session and logout verified (HTTP 200); cookie Secure/HttpOnly/SameSite=Strict verified. Telegram token remains unconfigured.
 - Current staging DATABASE_URL references Postgres's owner credential. A restricted
   runtime role remains REQUIRED before real use; do not treat this setup as security PASS.
 - API deployment `f342a25c-1bf7-4fc1-9d41-f739fcaed6fb`: SUCCESS.
 - Web deployment `c32bc8dd-db6f-4e44-82c3-214727cadb6b`: SUCCESS.
 - Live HTTPS `/health` verified: `{"app":"ok","database":"ok"}`.
 - Both deployed services use code commit `7153258f33a0496747235712b61d8fa16eac9ad1`.
-- Next: securely configure a freshly rotated bot token and initial administrator,
+- Bootstrap values cleared after account creation; pre-deploy restored to migrations only. Credentials are not stored in this repository.
+- Next: securely configure a freshly rotated bot token and link the verified owner Telegram ID,
   restrict the runtime DB role, then verify real Telegram login. Never reuse the chat token.
